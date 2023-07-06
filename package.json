@@ -9,9 +9,7 @@
     "vercel": "vercel"
   },
   "dependencies": {
-    "mime-types": "^2.1.35",
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "mime-types": "^2.1.35"
   },
   "devDependencies": {
     "@types/mime-types": "^2.1.1",
