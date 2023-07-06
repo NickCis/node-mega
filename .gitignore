@@ -1,0 +1,8 @@
+node_modules
+.npm
+.next
+.*.sw*
+.vercel
+venv
+__pycache__
+cotodigital.ljson
