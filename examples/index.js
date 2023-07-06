@@ -3,7 +3,6 @@ const http = require('node:http');
 const https = require('node:https');
 const crypto = require('node:crypto');
 
-const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 
 const url = 'https://mega.nz/file/A0ITTTRD#LVuyf5XhebPHkoUIjNAwE965V4NyxTDgGOnXI5gIYdc';
