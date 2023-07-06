@@ -252,6 +252,7 @@ async function mega(req: VercelRequest, res: VercelResponse) {
 
   res.status(200);
   res.setHeader('Content-Type', contentType || 'application/octet-stream');
+  res.setHeader('Transfer-Encoding', 'chunked');
 
   await pipeline(
     await createMegaFileStream(metadata.g),
