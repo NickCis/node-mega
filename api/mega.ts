@@ -9,9 +9,9 @@ import { pipeline } from 'node:stream/promises';
 
 const MegaAPI = 'https://g.api.mega.co.nz'; // https://eu.api.mega.co.nz
 
-async function post(url, body) {
+async function post(url: string, body: object) {
   const res = await new Promise<IncomingMessage>((rs, rj) => {
-    const req = https.request(
+    const req = (url.startsWith('https') ? https : http).request(
       url,
       {
         method: 'POST',
@@ -44,36 +44,59 @@ async function post(url, body) {
   });
 }
 
-async function fetchFileMetadata(id: string, folder: string) {
-  if (folder) {
-    return await post(`${MegaAPI}/cs?domain=meganz&n=${folder}`, [
-      {
-        a: 'g',
-        g: 1,
-        ssl: 0,
-        n: id,
-        v: 2,
-      },
-    ]);
-  }
-
-  return await post(`${MegaAPI}/cs?domain=meganz`, [
-    {
-      a: 'g',
-      g: 1,
-      ssl: 0,
-      p: id,
-    },
-  ]);
+interface MegaFileMetadata {
+  at: string; // attributes
+  g: string; // download url
 }
 
-async function fetchFolderMetadata(id: string) {
-  return await post(`${MegaAPI}/cs?domain=meganz&n=${id}`, [
+async function fetchFileMetadata(
+  id: string,
+  folder?: string,
+): Promise<MegaFileMetadata | undefined> {
+  const json = folder
+    ? await post(`${MegaAPI}/cs?domain=meganz&n=${folder}`, [
+        {
+          a: 'g',
+          g: 1,
+          ssl: 0,
+          n: id,
+          v: 2,
+        },
+      ])
+    : await post(`${MegaAPI}/cs?domain=meganz`, [
+        {
+          a: 'g',
+          g: 1,
+          ssl: 0,
+          p: id,
+        },
+      ]);
+
+  if (Array.isArray(json)) return json[0];
+}
+
+interface MegaFolderMetadataFile {
+  h: string; // id
+  p: string; // Parent folder
+  a: string; // Attributes
+  k: string; // Key
+}
+
+interface MegaFolderMetadata {
+  f: MegaFolderMetadataFile[];
+}
+
+async function fetchFolderMetadata(
+  id: string,
+): Promise<MegaFolderMetadata | undefined> {
+  const json = await post(`${MegaAPI}/cs?domain=meganz&n=${id}&v=2`, [
     { a: 'f', c: 1, r: 1, ca: 1 },
   ]);
+
+  if (Array.isArray(json)) return json[0];
 }
 
-function dataToBuffer(data) {
+function dataToBuffer(data: number[]) {
   const buffer = Buffer.alloc(data.length * 4);
   for (let i = 0; i < data.length; i++) {
     buffer.writeUint32BE(data[i], i * 4);
@@ -101,7 +124,11 @@ function getKeyIV(key: string) {
   };
 }
 
-function decryptAttributes(attributes, key, cipher = 'aes-128-cbc') {
+function decryptAttributes(
+  attributes: string,
+  key: string,
+  cipher = 'aes-128-cbc',
+): Record<string, string> {
   const pair = getKeyIV(key);
   const iv = Buffer.alloc(4 * 4, 0);
   const decipher = crypto.createDecipheriv(cipher, pair.key, iv);
@@ -111,7 +138,7 @@ function decryptAttributes(attributes, key, cipher = 'aes-128-cbc') {
     decipher.final(),
   ])
     .toString('utf8')
-    .replaceAll('\0', '')
+    .replace(/\0/g, '')
     .trim();
 
   if (str.startsWith('MEGA')) str = str.substring('MEGA'.length);
@@ -144,22 +171,36 @@ function createMegaDecriptStream(key: string, cipher = 'aes-128-ctr') {
   return crypto.createDecipheriv(cipher, pair.key, pair.iv);
 }
 
-function searchFile(metadata, path: string[], key: string) {
-  const [root, ...files] = metadata[0].f;
+interface ExtendedMegaFolderMetadataFile extends MegaFolderMetadataFile {
+  attr: Record<string, string>;
+  key: Buffer;
+  keyBase64: string;
+}
 
-  const recursiveSearch = (path, parent) => {
+function searchFile(
+  metadata: MegaFolderMetadata,
+  path: string[],
+  key: string,
+): ExtendedMegaFolderMetadataFile | undefined {
+  const [root, ...files] = metadata.f;
+
+  const recursiveSearch = (
+    path: string[],
+    parent: string,
+  ): ExtendedMegaFolderMetadataFile | undefined => {
     const [current, ...rest] = path;
     for (const file of files) {
       if (file.p === parent) {
-        if (!file.attr) {
-          const [, encryptedFileKey] = file.k.split(':');
-          file.key = decryptKey(encryptedFileKey, key);
-          file.keyBase64 = file.key.toString('base64');
-          file.attr = decryptAttributes(file.a, file.keyBase64);
+        const f = file as ExtendedMegaFolderMetadataFile;
+        if (!f.attr) {
+          const [, encryptedFileKey] = f.k.split(':');
+          f.key = decryptKey(encryptedFileKey, key);
+          f.keyBase64 = f.key.toString('base64');
+          f.attr = decryptAttributes(f.a, f.keyBase64);
         }
 
-        if (file.attr.n === current)
-          return rest.length ? recursiveSearch(rest, file.h) : file;
+        if (f.attr.n === current)
+          return rest.length ? recursiveSearch(rest, f.h) : f;
       }
     }
   };
@@ -176,14 +217,19 @@ async function mega(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const [root, ...rest] = path;
+  const [root, ...rest] = Array.isArray(path) ? path : path.split('/');
   let [id, key] = root.split(':');
   let folder;
 
   if (rest) {
     const metadata = await fetchFolderMetadata(id);
-    const file = searchFile(metadata, rest, key);
+    if (!metadata) {
+      res.status(404);
+      res.send('Not found');
+      return;
+    }
 
+    const file = searchFile(metadata, rest, key);
     if (!file) {
       res.status(404);
       res.send('Not found');
@@ -192,18 +238,23 @@ async function mega(req: VercelRequest, res: VercelResponse) {
 
     folder = id;
     id = file.h;
-    key = file.key;
+    key = file.keyBase64;
   }
 
   const metadata = await fetchFileMetadata(id, folder);
-  const attributes = decryptAttributes(metadata[0].at, key);
+  if (!metadata) {
+    res.status(404);
+    res.send('Not found');
+    return;
+  }
+  const attributes = decryptAttributes(metadata.at, key);
   const contentType = mime.lookup(attributes.n);
 
   res.status(200);
-  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Type', contentType || 'application/octet-stream');
 
   await pipeline(
-    await createMegaFileStream(metadata[0].g),
+    await createMegaFileStream(metadata.g),
     createMegaDecriptStream(key),
     res,
   );

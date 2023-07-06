@@ -1,0 +1,24 @@
+{
+  "headers": [
+    {
+      "source": "/api/mega/:path*",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/mega/:path*",
+      "destination": "/api/mega"
+    }
+  ],
+  "framework": null
+}
