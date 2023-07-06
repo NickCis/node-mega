@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import fs from 'node:fs';
 import http from 'node:http';
+import type { IncomingMessage } from 'node:http';
 import https from 'node:https';
 import crypto from 'node:crypto';
 import mime from 'mime-types';
@@ -9,7 +10,7 @@ import { pipeline } from 'node:stream/promises';
 const MegaAPI = 'https://g.api.mega.co.nz'; // https://eu.api.mega.co.nz
 
 async function post(url, body) {
-  const res = await new Promise((rs, rj) => {
+  const res = await new Promise<IncomingMessage>((rs, rj) => {
     const req = https.request(
       url,
       {
@@ -80,7 +81,7 @@ function dataToBuffer(data) {
   return buffer;
 }
 
-function getKeyIV(key) {
+function getKeyIV(key: string) {
   const keyPlain = Buffer.from(key, 'base64');
   const data = [];
   const length = keyPlain.length / 4;
@@ -117,7 +118,7 @@ function decryptAttributes(attributes, key, cipher = 'aes-128-cbc') {
   return JSON.parse(str);
 }
 
-function decryptKey(k, key, cipher = 'aes-128-ecb') {
+function decryptKey(k: string, key: string, cipher = 'aes-128-ecb') {
   const pair = getKeyIV(key);
   const decipher = crypto.createDecipheriv(cipher, pair.key, null);
   decipher.setAutoPadding(false);
@@ -127,8 +128,8 @@ function decryptKey(k, key, cipher = 'aes-128-ecb') {
   ]);
 }
 
-async function createMegaFileStream(url) {
-  return await new Promise((rs, rj) => {
+async function createMegaFileStream(url: string): Promise<IncomingMessage> {
+  return await new Promise<IncomingMessage>((rs, rj) => {
     const req = (url.startsWith('https') ? https : http).request(url, (res) =>
       rs(res),
     );
@@ -138,12 +139,12 @@ async function createMegaFileStream(url) {
   });
 }
 
-function createMegaDecriptStream(key, cipher = 'aes-128-ctr') {
+function createMegaDecriptStream(key: string, cipher = 'aes-128-ctr') {
   const pair = getKeyIV(key);
   return crypto.createDecipheriv(cipher, pair.key, pair.iv);
 }
 
-function searchFile(metadata, path: string[], key) {
+function searchFile(metadata, path: string[], key: string) {
   const [root, ...files] = metadata[0].f;
 
   const recursiveSearch = (path, parent) => {
