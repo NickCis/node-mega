@@ -165,7 +165,6 @@ function searchFile(metadata, path: string[], key: string) {
   };
 
   return recursiveSearch(path, root.h);
-
 }
 
 async function mega(req: VercelRequest, res: VercelResponse) {
