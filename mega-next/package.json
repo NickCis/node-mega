@@ -12,14 +12,12 @@
   },
   "dependencies": {
     "mime-types": "^2.1.35",
-    "next": "14.0.4",
-    "react": "^18",
-    "react-dom": "^18"
+    "next": "14.0.4"
   },
   "devDependencies": {
+    "@types/mime-types": "^2.1.1",
     "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "^18.2.48",
     "eslint": "^8",
     "eslint-config-next": "14.0.4",
     "typescript": "^5",

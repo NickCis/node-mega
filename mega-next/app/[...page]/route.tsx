@@ -223,16 +223,16 @@ export async function GET(req: NextRequest) {
   let [id, key] = root.split(':');
 
   if (!key)
-    return new Response('No key', { statusCode: 400 });
+    return new Response('No key', { status: 400 });
 
   let folder;
 
   if (rest) {
     const metadata = await fetchFolderMetadata(id);
-    if (!metadata) return new Response('Not found', { statusCode: 404 });
+    if (!metadata) return new Response('Not found', { status: 404 });
 
     const file = searchFile(metadata, rest, key);
-    if (!file) return new Response('Not found', { statusCode: 404 });
+    if (!file) return new Response('Not found', { status: 404 });
 
     folder = id;
     id = file.h;
@@ -240,14 +240,11 @@ export async function GET(req: NextRequest) {
   }
 
   const metadata = await fetchFileMetadata(id, folder);
-  if (!metadata) return new Response('Not found', { statusCode: 404 });
+  if (!metadata) return new Response('Not found', { status: 404 });
   const attributes = decryptAttributes(metadata.at, key);
   const contentType = mime.lookup(attributes.n);
 
-  console.log('attributes', attributes);
-  console.log('contentType', contentType);
-
-  const ref = {};
+  const ref: { current?: ReadableStreamDefaultController } = {};
   const customReadable = new ReadableStream({
     start(controller) {
       ref.current = controller;
@@ -261,7 +258,7 @@ export async function GET(req: NextRequest) {
       decodeStrings: false,
       write(chunk, encoding, cb) {
         try {
-          ref.current.enqueue(chunk);
+          ref.current?.enqueue(chunk);
         } catch (e) {
           console.trace(e);
         }
@@ -269,7 +266,7 @@ export async function GET(req: NextRequest) {
       },
       final(cb) {
         try {
-        ref.current.close();
+        ref.current?.close();
         } catch (e) {
           console.trace(e);
         }
