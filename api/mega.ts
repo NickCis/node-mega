@@ -253,6 +253,7 @@ async function mega(req: VercelRequest, res: VercelResponse) {
   res.status(200);
   res.setHeader('Content-Type', contentType || 'application/octet-stream');
   res.setHeader('Transfer-Encoding', 'chunked');
+  res.setHeader('Cache-Control', 'public, immutable, max-age=31536000');
 
   await pipeline(
     await createMegaFileStream(metadata.g),
