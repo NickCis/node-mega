@@ -1,11 +1,12 @@
 {
   "name": "meganz",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "scripts": {
     "deploy": "vercel --prod",
     "format": "prettier --write '{api,}/**/*.{js,ts,tsx}' vercel.json prettier.config.js tsconfig.json .eslintrc.json",
-    "local": "vercel dev",
+    "dev": "vercel dev",
     "vercel": "vercel"
   },
   "dependencies": {
@@ -21,6 +22,9 @@
     "eslint-config-prettier": "^8.8.0",
     "eslint-plugin-prettier": "^4.2.1",
     "prettier": "^3.0.0",
-    "vercel": "^31.0.1"
+    "vercel": "^33.1.0"
+  },
+  "engines": {
+    "node": "20.x"
   }
 }
