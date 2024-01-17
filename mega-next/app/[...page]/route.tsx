@@ -1,12 +1,18 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+// https://nextjs.org/docs/app/building-your-application/routing/route-handlers
+// https://vercel.com/docs/functions/streaming/quickstart
+
+import type { NextRequest } from 'next/server';
 import type { IncomingMessage } from 'node:http';
+
 import http from 'node:http';
 import https from 'node:https';
 import crypto from 'node:crypto';
 import mime from 'mime-types';
 import { pipeline } from 'node:stream/promises';
+import { Writable } from 'node:stream';
 
-// TODO: change it into streams? https://vercel.com/docs/functions/streaming/quickstart
+// Prevents this route's response from being cached
+export const dynamic = 'force-dynamic';
 
 const MegaAPI = 'https://g.api.mega.co.nz'; // https://eu.api.mega.co.nz
 
@@ -208,39 +214,25 @@ function searchFile(
 
   return recursiveSearch(path, root.h);
 }
+ 
+// This method must be named GET
+export async function GET(req: NextRequest) {
 
-async function mega(req: VercelRequest, res: VercelResponse) {
-  const { path } = req.query;
-
-  if (!path) {
-    res.status(404);
-    res.send('Not found');
-    return;
-  }
-
-  const [root, ...rest] = Array.isArray(path) ? path : path.split('/');
+  const url = new URL(req.url);
+  const [, root, ...rest] = url.pathname.split('/');
   let [id, key] = root.split(':');
-  if (!key) {
-    res.status(500);
-    res.send('No key');
-    return;
-  }
+
+  if (!key)
+    return new Response('No key', { statusCode: 400 });
+
   let folder;
 
   if (rest) {
     const metadata = await fetchFolderMetadata(id);
-    if (!metadata) {
-      res.status(404);
-      res.send('Not found');
-      return;
-    }
+    if (!metadata) return new Response('Not found', { statusCode: 404 });
 
     const file = searchFile(metadata, rest, key);
-    if (!file) {
-      res.status(404);
-      res.send('Not found');
-      return;
-    }
+    if (!file) return new Response('Not found', { statusCode: 404 });
 
     folder = id;
     id = file.h;
@@ -248,24 +240,49 @@ async function mega(req: VercelRequest, res: VercelResponse) {
   }
 
   const metadata = await fetchFileMetadata(id, folder);
-  if (!metadata) {
-    res.status(404);
-    res.send('Not found');
-    return;
-  }
+  if (!metadata) return new Response('Not found', { statusCode: 404 });
   const attributes = decryptAttributes(metadata.at, key);
   const contentType = mime.lookup(attributes.n);
 
-  res.status(200);
-  res.setHeader('Content-Type', contentType || 'application/octet-stream');
-  res.setHeader('Transfer-Encoding', 'chunked');
-  res.setHeader('Cache-Control', 'public, immutable, max-age=31536000');
+  console.log('attributes', attributes);
+  console.log('contentType', contentType);
 
-  await pipeline(
+  const ref = {};
+  const customReadable = new ReadableStream({
+    start(controller) {
+      ref.current = controller;
+    },
+  });
+
+  pipeline(
     await createMegaFileStream(metadata.g),
     createMegaDecriptStream(key),
-    res,
+    new Writable({
+      decodeStrings: false,
+      write(chunk, encoding, cb) {
+        try {
+          ref.current.enqueue(chunk);
+        } catch (e) {
+          console.trace(e);
+        }
+        cb();
+      },
+      final(cb) {
+        try {
+        ref.current.close();
+        } catch (e) {
+          console.trace(e);
+        }
+        cb();
+      },
+    }),
   );
-}
 
-export default mega;
+  return new Response(customReadable, {
+    headers: {
+      'Content-Type': contentType || 'application/octet-stream',
+      'Transfer-Encoding': 'chunked',
+      'Cache-Control': 'public, immutable, max-age=31536000',
+    },
+  });
+}

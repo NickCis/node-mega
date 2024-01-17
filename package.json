@@ -6,7 +6,7 @@
   "scripts": {
     "deploy": "vercel --prod",
     "format": "prettier --write '{api,}/**/*.{js,ts,tsx}' vercel.json prettier.config.js tsconfig.json .eslintrc.json",
-    "dev": "vercel dev",
+    "local": "vercel dev",
     "vercel": "vercel"
   },
   "dependencies": {
@@ -15,7 +15,6 @@
   "devDependencies": {
     "@types/mime-types": "^2.1.1",
     "@types/node": "20.4.0",
-    "@types/react": "18.2.14",
     "@vercel/node": "^2.15.3",
     "eslint": "^8.44.0",
     "eslint-config-next": "^13.4.8",
