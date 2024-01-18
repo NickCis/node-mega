@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "deploy": "vercel --prod",
-    "format": "prettier --write '{api,}/**/*.{js,ts,tsx}' vercel.json prettier.config.js tsconfig.json .eslintrc.json",
+    "format": "prettier --config ../prettier.config.cjs --write '{api,}/**/*.{js,ts,tsx}' vercel.json tsconfig.json .eslintrc.json",
     "local": "vercel dev",
     "vercel": "vercel"
   },

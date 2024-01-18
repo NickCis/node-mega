@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import mime from 'mime-types';
 import { pipeline } from 'node:stream/promises';
 import { Writable } from 'node:stream';
+import EventEmitter from 'node:events';
 
 // Prevents this route's response from being cached
 export const dynamic = 'force-dynamic';
@@ -164,9 +165,9 @@ function decryptKey(k: string, key: string, cipher = 'aes-128-ecb') {
 
 async function createMegaFileStream(url: string): Promise<IncomingMessage> {
   return await new Promise<IncomingMessage>((rs, rj) => {
-    const req = (url.startsWith('https') ? https : http).request(url, (res) =>
-      rs(res),
-    );
+    const req = (url.startsWith('https') ? https : http).request(url, (res) => {
+      rs(res);
+    });
 
     req.on('error', (e) => rj(e));
     req.end();
@@ -214,25 +215,59 @@ function searchFile(
 
   return recursiveSearch(path, root.h);
 }
- 
+
+function toReadableStream(
+  f: (writable: Writable) => Promise<void>,
+): ReadableStream {
+  const emitter = new EventEmitter();
+  return new ReadableStream({
+    async start(controller: ReadableStreamDefaultController) {
+      f(
+        new Writable({
+          decodeStrings: false,
+          async write(chunk, encoding, cb) {
+            try {
+              controller.enqueue(chunk);
+              if (controller.desiredSize <= 0)
+                await new Promise((rs) => emitter.once('pull', rs));
+            } catch (e) {
+              console.trace(e);
+            }
+            cb();
+          },
+          final(cb) {
+            try {
+              controller.close();
+            } catch (e) {
+              console.trace(e);
+            }
+            cb();
+          },
+        }),
+      );
+    },
+    pull() {
+      emitter.emit('pull');
+    },
+  });
+}
+
 // This method must be named GET
 export async function GET(req: NextRequest) {
-
   const url = new URL(req.url);
   const [, root, ...rest] = url.pathname.split('/');
   let [id, key] = root.split(':');
 
-  if (!key)
-    return new Response('No key', { status: 400 });
+  if (!key) return new Response('No key', { status: 400 });
 
   let folder;
 
   if (rest) {
     const metadata = await fetchFolderMetadata(id);
-    if (!metadata) return new Response('Not found', { status: 404 });
+    if (!metadata) return new Response('No folder metadata', { status: 404 });
 
     const file = searchFile(metadata, rest, key);
-    if (!file) return new Response('Not found', { status: 404 });
+    if (!file) return new Response('No file', { status: 404 });
 
     folder = id;
     id = file.h;
@@ -240,42 +275,19 @@ export async function GET(req: NextRequest) {
   }
 
   const metadata = await fetchFileMetadata(id, folder);
-  if (!metadata) return new Response('Not found', { status: 404 });
+  if (!metadata) return new Response('No file metadata', { status: 404 });
   const attributes = decryptAttributes(metadata.at, key);
   const contentType = mime.lookup(attributes.n);
 
-  const ref: { current?: ReadableStreamDefaultController } = {};
-  const customReadable = new ReadableStream({
-    start(controller) {
-      ref.current = controller;
-    },
+  const readable = toReadableStream(async (writable: Writable) => {
+    pipeline(
+      await createMegaFileStream(metadata.g),
+      createMegaDecriptStream(key),
+      writable,
+    );
   });
 
-  pipeline(
-    await createMegaFileStream(metadata.g),
-    createMegaDecriptStream(key),
-    new Writable({
-      decodeStrings: false,
-      write(chunk, encoding, cb) {
-        try {
-          ref.current?.enqueue(chunk);
-        } catch (e) {
-          console.trace(e);
-        }
-        cb();
-      },
-      final(cb) {
-        try {
-        ref.current?.close();
-        } catch (e) {
-          console.trace(e);
-        }
-        cb();
-      },
-    }),
-  );
-
-  return new Response(customReadable, {
+  return new Response(readable, {
     headers: {
       'Content-Type': contentType || 'application/octet-stream',
       'Transfer-Encoding': 'chunked',

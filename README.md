@@ -2,12 +2,12 @@
 
 Provide a direct linking api to a mega file.
 
-After deployment the link should be: `https://<base>/api/mega/<id>:<key>/...`.
+After deployment the link should be: `https://<base>/<id>:<key>/...`.
 
 The idea is to share a folder and be able to have a direct link to the files in that folder.
 
-For example, if the share link is the following: `https://mega.nz/folder/XXXXX#YYYYYYYYYYY`, the link to access directly to a `test.pdf` file inside that folder will be the following: `https://<base>/api/mega/XXXXX:YYYYYYYYYYY/test.pdf`
+For example, if the share link is the following: `https://mega.nz/folder/XXXXX#YYYYYYYYYYY`, the link to access directly to a `test.pdf` file inside that folder will be the following: `https://<base>/XXXXX:YYYYYYYYYYY/test.pdf`
 
 ## TODO
 
-- Move api to cloudflare (it supports nodejs streaming) ([cloudflare streaming](https://developers.cloudflare.com/workers/runtime-apis/streams/) vs [vercel streaming](https://vercel.com/docs/functions/streaming/quickstart))
+- Use [sjcl](https://www.npmjs.com/package/sjcl) for edge functions crypto (CloudFlare doesn't implement the needed crypto api, Vercel uses the browsers implementation which doesn't implement `aes-128-cbc`). Megaupload website seems to use this library.
