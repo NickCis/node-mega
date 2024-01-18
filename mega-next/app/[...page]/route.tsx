@@ -228,7 +228,7 @@ function toReadableStream(
           async write(chunk, encoding, cb) {
             try {
               controller.enqueue(chunk);
-              if (controller.desiredSize <= 0)
+              if ((controller.desiredSize || 0) <= 0)
                 await new Promise((rs) => emitter.once('pull', rs));
             } catch (e) {
               console.trace(e);

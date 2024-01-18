@@ -10,4 +10,4 @@ For example, if the share link is the following: `https://mega.nz/folder/XXXXX#Y
 
 ## TODO
 
-- Use [sjcl](https://www.npmjs.com/package/sjcl) for edge functions crypto (CloudFlare doesn't implement the needed crypto api, Vercel uses the browsers implementation which doesn't implement `aes-128-cbc`). Megaupload website seems to use this library.
+- Use [sjcl](https://www.npmjs.com/package/sjcl) for edge functions crypto (CloudFlare doesn't implement the needed crypto api, Vercel uses the browsers implementation which doesn't implement `aes-128-ecb`). Megaupload website seems to use this library (use Browser's SubtleCrypto for `aes-ctr` and `aes-cbc`).
