@@ -68,7 +68,8 @@ async function fetchFileMetadata(
           g: 1,
           ssl: 0,
           n: id,
-          v: 2,
+          // v: 2,
+          v: 1,
         },
       ])
     : await post(`${MegaAPI}/cs?domain=meganz`, [
@@ -252,6 +253,10 @@ function toReadableStream(
   });
 }
 
+const EncodingFixes: Record<string, string> = {
+  'text/vtt': 'text/vtt; charset=utf-8',
+};
+
 // This method must be named GET
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -289,7 +294,7 @@ export async function GET(req: NextRequest) {
 
   return new Response(readable, {
     headers: {
-      'Content-Type': contentType || 'application/octet-stream',
+      'Content-Type': EncodingFixes[contentType as string] || contentType || 'application/octet-stream',
       'Transfer-Encoding': 'chunked',
       'Cache-Control': 'public, immutable, max-age=31536000',
     },

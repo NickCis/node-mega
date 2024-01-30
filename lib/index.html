@@ -1,0 +1,336 @@
+<script>
+const MegaAPI = 'https://g.api.mega.co.nz'; // https://eu.api.mega.co.nz
+
+async function post(url, json) {
+  return await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(json),
+  });
+}
+
+function fromBase64(str) {
+  const base64 = atob(str.replace(/_/g, '/').replace(/-/g, '+'));
+  const buffer = new Uint8Array(base64.length);
+
+  // new TextEncoder().encode(base64);
+  for (let i=0; i < base64.length; i++) {
+    buffer[i] = base64.charCodeAt(i);
+  }
+
+  return buffer;
+}
+
+function dataToBuffer(data) {
+  const buffer = new ArrayBuffer(data.length * 4);
+  const view = new DataView(buffer);
+  for (let i = 0; i < data.length; i++) {
+    view.setUint32(i * 4, data[i],  false)
+  }
+  return buffer;
+}
+
+function getKeyIV(keyPlain) {
+  const data = [];
+  const view = new DataView(keyPlain.buffer);
+  const length = keyPlain.length / 4;
+
+  for (let i = 0; i < length; i++) {
+    data.push(view.getUint32(i * 4, false) >>> 0);
+  }
+
+  return {
+    key: dataToBuffer([
+      (data[0] ^ data[4]) >>> 0,
+      (data[1] ^ data[5]) >>> 0,
+      (data[2] ^ data[6]) >>> 0,
+      (data[3] ^ data[7]) >>> 0,
+    ]),
+    iv: dataToBuffer([data[4], data[5], 0, 0]),
+  };
+}
+
+function getKeyIVBase64(key) {
+  const keyPlain = fromBase64(key);
+  return getKeyIV(keyPlain);
+}
+
+function base64ArrayBuffer(arrayBuffer) {
+  var base64    = ''
+  var encodings = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+  var bytes         = new Uint8Array(arrayBuffer)
+  var byteLength    = bytes.byteLength
+  var byteRemainder = byteLength % 3
+  var mainLength    = byteLength - byteRemainder
+
+  var a, b, c, d
+  var chunk
+
+  // Main loop deals with bytes in chunks of 3
+  for (var i = 0; i < mainLength; i = i + 3) {
+    // Combine the three bytes into a single integer
+    chunk = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2]
+
+    // Use bitmasks to extract 6-bit segments from the triplet
+    a = (chunk & 16515072) >> 18 // 16515072 = (2^6 - 1) << 18
+    b = (chunk & 258048)   >> 12 // 258048   = (2^6 - 1) << 12
+    c = (chunk & 4032)     >>  6 // 4032     = (2^6 - 1) << 6
+    d = chunk & 63               // 63       = 2^6 - 1
+
+    // Convert the raw binary segments to the appropriate ASCII encoding
+    base64 += encodings[a] + encodings[b] + encodings[c] + encodings[d]
+  }
+
+  // Deal with the remaining bytes and padding
+  if (byteRemainder == 1) {
+    chunk = bytes[mainLength]
+
+    a = (chunk & 252) >> 2 // 252 = (2^6 - 1) << 2
+
+    // Set the 4 least significant bits to zero
+    b = (chunk & 3)   << 4 // 3   = 2^2 - 1
+
+    base64 += encodings[a] + encodings[b] + '=='
+  } else if (byteRemainder == 2) {
+    chunk = (bytes[mainLength] << 8) | bytes[mainLength + 1]
+
+    a = (chunk & 64512) >> 10 // 64512 = (2^6 - 1) << 10
+    b = (chunk & 1008)  >>  4 // 1008  = (2^6 - 1) << 4
+
+    // Set the 2 least significant bits to zero
+    c = (chunk & 15)    <<  2 // 15    = 2^4 - 1
+
+    base64 += encodings[a] + encodings[b] + encodings[c] + '='
+  }
+
+  return base64
+}
+
+// In order to encrypt by aes we will use a CTR
+async function encryptAES(key, plain) {
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    key,
+    {
+      name: 'AES-CTR',
+      length: plain.length,
+      counter: plain,
+    },
+    false,
+    ['encrypt']
+  );
+
+  return await crypto.subtle.encrypt(
+    { name: 'AES-CTR', counter: plain, length: plain.length },
+    cryptoKey,
+    new Uint8Array(plain.length),
+  );
+
+}
+
+function xor(b1, b2, offset = 0) {
+  const output = new Uint8Array(b1.length - offset);
+
+  for (let i=offset; i < b1.length; i++) {
+    output[i - offset] = b1[offset + i] ^ b2[i];
+  }
+
+  return output;
+}
+
+async function decrypt(key, iv, ciphertext) {
+  return await crypto.subtle.decrypt(
+    { name: 'AES-CBC', iv },
+    await crypto.subtle.importKey(
+      'raw',
+      key,
+      { name: 'AES-CBC' },
+      false,
+      ['decrypt']
+    ),
+    ciphertext,
+  );
+}
+
+async function derivePadding(key, encrypted) {
+  const padding = new Uint8Array(16);
+  padding.fill(16);
+  return await encryptAES(key, xor(encrypted, padding, encrypted.length - 16));
+}
+
+function concat (...views) {
+  let length = 0
+  for (const v of views) {
+    length += v.byteLength
+  }
+
+  const buf = new Uint8Array(length)
+  let offset = 0
+  for (const v of views) {
+    const uint8view = ArrayBuffer.isView(v)
+      ? new Uint8Array(v.buffer, v.byteOffset, v.byteLength)
+      : new Uint8Array(v);
+    buf.set(uint8view, offset)
+    offset += uint8view.byteLength
+  }
+
+  return buf
+}
+
+// block
+async function decryptNoPadding(key, iv, encrypted) {
+  return await decrypt(
+    key,
+    iv,
+    concat(
+      encrypted,
+      await derivePadding(key, encrypted),
+    )
+  );
+}
+
+async function decryptNoPaddingCBC(key, iv, encrypted) {
+  let enc;
+  let plain;
+  const bufs = [];
+
+  for (let start = 0; start < encrypted.length; start += 16) {
+    const civ = enc ? xor(new Uint8Array(enc), plain) : iv;
+    enc = encrypted.slice(start, start + 16);
+    plain = await decryptNoPadding(key, civ, enc);
+    bufs.push(plain);
+  }
+
+  return concat(...bufs);
+}
+
+async function decryptNoPaddingECB(key, iv, encrypted) {
+  const bufs = [];
+  // Se podría paralelizar
+  for (let start = 0; start < encrypted.length; start += 16) {
+    const current = encrypted.slice(start, start + 16);
+    const b = await decryptNoPadding(key, iv, current);
+    bufs.push(b);
+  }
+
+  return concat(...bufs);
+}
+
+async function fetchFolderMetadata(id) {
+  const res = await post(
+    `${MegaAPI}/cs?domain=meganz&n=${encodeURIComponent(id)}&v=2`,
+    [{ "a": "f", "c": 1, "r": 1, "ca": 1 }]
+  );
+  const json = await res.json();
+  if (Array.isArray(json)) return json[0];
+  return json;
+}
+
+async function decryptAttributes(key, iv, attr) {
+  const raw = await decryptNoPaddingCBC(key, iv, fromBase64(attr))
+  for (let i=0; i < raw.length; i++) {
+    if (raw[i] === 0) raw[i] = 32;
+  }
+  let text = new TextDecoder().decode(raw).trim();
+  if (text.startsWith('MEGA')) text = text.substring('MEGA'.length);
+  return JSON.parse(text);
+}
+
+async function searchFile(
+  metadata,
+  path,
+  pair,
+) {
+  const [root, ...files] = metadata.f;
+  const iv = new Uint8Array(16);
+
+  const recursiveSearch = async (
+    path,
+    parent,
+  ) => {
+    const [current, ...rest] = path;
+    for (const file of files) {
+      if (file.p === parent) {
+        const f = file;
+        if (!f.attr) {
+          const [, encryptedFileKey] = f.k.split(':');
+          f.key = await decryptNoPaddingECB(pair.key, pair.iv, fromBase64(encryptedFileKey));
+          f.pair = getKeyIV(f.key)
+          f.attr = await decryptAttributes(f.pair.key, iv, f.a);
+        }
+
+        if (f.attr.n === current)
+          return rest.length ? await recursiveSearch(rest, f.h) : f;
+      }
+    }
+  };
+
+  return await recursiveSearch(path, root.h);
+}
+
+async function fetchFileMetadata(
+  id,
+  folder
+) {
+  const res = folder
+    ? await post(`${MegaAPI}/cs?domain=meganz&n=${folder}`, [
+      {
+        a: 'g',
+        g: 1,
+        ssl: 0,
+        n: id,
+        v: 2,
+      },
+    ])
+    : await post(`${MegaAPI}/cs?domain=meganz`, [
+      {
+        a: 'g',
+        g: 1,
+        ssl: 0,
+        p: id,
+      },
+    ]);
+  const json = await res.json();
+
+  if (Array.isArray(json)) return json[0];
+}
+
+// Always folder
+async function downloadFile(id, key, path) {
+  const pair = getKeyIVBase64(key);
+  const metadata = await fetchFolderMetadata(id);
+  const file = await searchFile(metadata, path, pair);
+  const fileMetadata = await fetchFileMetadata(file.h, id);
+  // const attributes = await decryptAttributes(file.pair.key, new Uint8Array(16), fileMetadata.at);
+  // console.log('attributes', attributes);
+
+  const res = await fetch(fileMetadata.g);
+  const buffer = await res.arrayBuffer();
+  return await crypto.subtle.decrypt(
+    { name: 'AES-CTR', counter: file.pair.iv, length: 64 },
+    await crypto.subtle.importKey(
+      'raw',
+      file.pair.key,
+      { name: 'AES-CTR' },
+      false,
+      ['decrypt']
+    ),
+    buffer,
+  );
+
+}
+
+async function test() {
+  // N0xG2JAa:q1cMbvH_2J_Lr62kSZyLgw/test.txt
+  const id = 'N0xG2JAa';
+  const key = 'q1cMbvH_2J_Lr62kSZyLgw';
+
+  const file = await downloadFile(id, key, ['test.txt']);
+  console.log(new TextDecoder().decode(file));
+}
+
+</script>
+
