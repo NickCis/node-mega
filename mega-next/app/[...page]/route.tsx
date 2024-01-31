@@ -2,19 +2,23 @@
 // https://vercel.com/docs/functions/streaming/quickstart
 
 import type { NextRequest } from 'next/server';
-import type { IncomingMessage } from 'node:http';
 
 import http from 'node:http';
 import https from 'node:https';
-import mime from 'mime-types';
 import { pipeline } from 'node:stream/promises';
 import { Writable } from 'node:stream';
 import EventEmitter from 'node:events';
+import mime from 'mime-types';
+import { LRUCache } from 'lru-cache'
 
 import { Folder, File } from '@/lib/node';
 
 // Prevents this route's response from being cached
 export const dynamic = 'force-dynamic';
+
+const cache = new LRUCache({
+  max: 100,
+});
 
 function toReadableStream(
   f: (writable: Writable) => Promise<void>,
@@ -67,7 +71,8 @@ export async function GET(req: NextRequest) {
   let file: File | undefined;
 
   if (rest) {
-    const folder = new Folder(id, key);
+    const folder = (cache.get(id) as Folder) || new Folder(id, key);
+    cache.set(id, folder);
     file = await folder.searchFile(rest);
   } else {
     file = File.fromIdKey(id, key);

@@ -5,13 +5,15 @@
   "scripts": {
     "dev": "rm -rf lib && ln -s ../lib lib && next dev",
     "build": "next build",
-    "deploy": "rm -rf lib && mkdir lib && cp -r ../lib/{node.ts,common.ts,types.ts} lib/ && vercel --prod",
+    "copy-lib": "rm -rf lib && mkdir lib && cp -r ../lib/{node.ts,common.ts,types.ts} lib/",
+    "deploy": "npm run copy-lib && vercel --prod",
     "format": "prettier --config ../prettier.config.cjs --write 'app/**/*.{js,ts,tsx}' tsconfig.json .eslintrc.json next.config.js vercel.json",
     "lint": "next lint",
     "local": "vercel dev",
     "start": "next start"
   },
   "dependencies": {
+    "lru-cache": "^10.2.0",
     "mime-types": "^2.1.35",
     "next": "14.0.4"
   },
