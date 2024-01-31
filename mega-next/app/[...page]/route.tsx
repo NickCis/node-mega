@@ -72,8 +72,8 @@ export async function GET(req: NextRequest) {
 
   if (rest) {
     const folder = (cache.get(id) as Folder) || new Folder(id, key);
-    cache.set(id, folder);
     file = await folder.searchFile(rest);
+    cache.set(id, folder);
   } else {
     file = File.fromIdKey(id, key);
   }
