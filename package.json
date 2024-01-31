@@ -1,0 +1,22 @@
+{
+  "name": "meganz-lib",
+  "version": "0.0.1",
+  "description": "Provide a direct linking api to a mega file.",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "format": "prettier --config ./prettier.config.cjs --write 'lib/**/*.{js,ts,tsx}'",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@types/mime-types": "^2.1.1",
+    "@types/node": "^20",
+    "eslint": "^8",
+    "eslint-config-next": "14.0.4",
+    "prettier": "^3.0.0"
+  },
+  "author": "",
+  "license": "BSD"
+}

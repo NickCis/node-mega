@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "rm -rf lib && ln -s ../lib lib && next dev",
     "build": "next build",
-    "deploy": "vercel --prod",
+    "deploy": "rm -rf lib && mkdir lib && cp -r ../lib/{node.ts,common.ts,types.ts} lib/ && vercel --prod",
     "format": "prettier --config ../prettier.config.cjs --write 'app/**/*.{js,ts,tsx}' tsconfig.json .eslintrc.json next.config.js vercel.json",
     "lint": "next lint",
     "local": "vercel dev",
