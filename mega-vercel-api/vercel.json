@@ -1,7 +1,7 @@
 {
   "headers": [
     {
-      "source": "/api/mega/:path*",
+      "source": "/:path*",
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
@@ -16,7 +16,7 @@
   ],
   "rewrites": [
     {
-      "source": "/api/mega/:path*",
+      "source": "/:path*",
       "destination": "/api/mega"
     }
   ],

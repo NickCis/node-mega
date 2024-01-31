@@ -11,6 +11,11 @@
     "strictPropertyInitialization": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
-    "esModuleInterop": true
-  }
+    "esModuleInterop": true,
+    "paths": {
+      "@/*": ["./*"],
+    },
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules"],
 }

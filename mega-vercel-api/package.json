@@ -4,12 +4,14 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "deploy": "vercel --prod",
+    "copy-lib": "rm -rf lib && mkdir lib && cp -r ../lib/{node.ts,common.ts,types.ts} lib/ && sed -i \"s/^import\\(.*\\)from '\\.\\(.*\\)'\\(.*\\)/import\\1from '.\\2.js'\\3/\" lib/*.ts && sed -i \"s/^} from '\\.\\(.*\\)'\\(.*\\)/} from '.\\1.js'\\2/\" lib/*.ts",
+    "deploy": "npm run copy-lib && vercel --prod",
     "format": "prettier --config ../prettier.config.cjs --write '{api,}/**/*.{js,ts,tsx}' vercel.json tsconfig.json .eslintrc.json",
-    "local": "vercel dev",
+    "local": "npm run copy-lib && vercel dev",
     "vercel": "vercel"
   },
   "dependencies": {
+    "lru-cache": "^10.2.0",
     "mime-types": "^2.1.35"
   },
   "devDependencies": {
