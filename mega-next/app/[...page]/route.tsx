@@ -9,7 +9,7 @@ import { pipeline } from 'node:stream/promises';
 import { Writable } from 'node:stream';
 import EventEmitter from 'node:events';
 import mime from 'mime-types';
-import { LRUCache } from 'lru-cache'
+import { LRUCache } from 'lru-cache';
 
 import { Folder, File } from '@/lib/node';
 
@@ -69,10 +69,12 @@ export async function GET(req: NextRequest) {
   if (!key) return new Response('No key', { status: 400 });
 
   let file: File | undefined;
+  let filename;
 
   if (rest) {
     const folder = (cache.get(id) as Folder) || new Folder(id, key);
     file = await folder.searchFile(rest);
+    filename = rest[rest.length - 1];
     cache.set(id, folder);
   } else {
     file = File.fromIdKey(id, key);
@@ -81,7 +83,7 @@ export async function GET(req: NextRequest) {
   if (!file) return new Response('No file', { status: 404 });
   const f: File = file;
 
-  const filename = await file.getFilename();
+  if (!filename) filename = await file.getFilename();
   const contentType = mime.lookup(filename);
 
   const readable = toReadableStream(async (writable: Writable) => {
