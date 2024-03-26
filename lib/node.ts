@@ -1,7 +1,8 @@
 import http, { type IncomingMessage } from 'node:http';
 import https from 'node:https';
 import crypto from 'node:crypto';
-import zlib from "node:zlib";
+import zlib from 'node:zlib';
+import type { Readable } from 'node:stream';
 
 import type {
   MegaFolderMetadata,
@@ -55,7 +56,7 @@ function getKeyIVBase64(key: string) {
 
 async function fetch(mreq: MegaRequest): Promise<string> {
   const url = mreq.url;
-  let res = await new Promise<IncomingMessage>((rs, rj) => {
+  const res = await new Promise<IncomingMessage>((rs, rj) => {
     const req = (url.startsWith('https') ? https : http).request(
       url,
       {
@@ -69,12 +70,14 @@ async function fetch(mreq: MegaRequest): Promise<string> {
     if ('body' in mreq && mreq.body) req.write(mreq.body);
     req.end();
   });
+
+  let readable: Readable = res;
   const contentEncoding = res.headers['content-encoding'];
 
   if (contentEncoding?.toLowerCase() === 'gzip') {
     const gzip = zlib.createGunzip();
     res.pipe(gzip);
-    res = gzip;
+    readable = gzip;
   }
 
   let data = '';
