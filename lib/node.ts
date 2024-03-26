@@ -82,12 +82,12 @@ async function fetch(mreq: MegaRequest): Promise<string> {
 
   let data = '';
 
-  res.on('data', (d) => {
+  readable.on('data', (d) => {
     data += d;
   });
 
   return await new Promise((rs) => {
-    res.on('end', () => {
+    readable.on('end', () => {
       rs(data);
     });
   });
